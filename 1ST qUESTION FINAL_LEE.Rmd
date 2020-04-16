@@ -1,0 +1,182 @@
+---
+title: "1st qUSETION LE"
+author: "MANJUNATH"
+date: "12/12/2019"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+#Question 1
+#Dataset1
+#a) What is the dimensions and the meaning of the rows and columns of the object `dtm_b`?
+
+```{r }
+library(textmineR) 
+library(tidyverse)
+library(arules)
+library(arulesViz)
+library(dplyr)
+library(tm)
+library(DT)
+library(ngram)
+
+
+#install.packages("ngram")
+
+bible<-read.csv("https://raw.githubusercontent.com/vigneshjmurali/Statistical-Predictive-Modelling/master/Datasets/bible_asv.csv")
+dim(bible)
+# CREATING FACTOR VARIABLE FOR VARIABLE BOOKS
+bible_bt=aggregate(Testaments~Books,data=bible,FUN = unique,collapse="" )
+bible_bt$Testaments=as.factor(ifelse(bible_bt$Testaments==bible_bt$Testaments[1],1,2))# Creating levels for books as OT =1 & NT =2
+
+ 
+
+levels(bible$Sections)
+bible_bs=aggregate(Sections~Books, data=bible, FUN = unique, collapse="")
+bible_bs$Sections<-ordered(bible_bs$Sections,levels=c('Apostles','Gospels','History','Law','Paul','Prophets','Wisdom'))
+
+# CREATING FACTOR VARIABLE FOR VARIABLE CHAPTERS
+bible_cht=aggregate(Testaments~Chapters,data=bible,FUN=unique, collapse="")
+bible_cht$Testaments=as.factor(ifelse(bible_cht$Testaments==bible_cht$Testaments[1],1,2))
+
+bible_chs=aggregate(Sections~Chapters,data=bible,FUN=unique,collapse="")
+bible_chs$Sections<-ordered(bible_chs$Sections,levels=c('Apostles','Gospels','History','Law','Paul','Prophets','Wisdom'))
+
+# CREATING FACTOR VARIABLE FOR VARIABLE VERSES
+bible_vt=bible[,c('Testaments','Verses')]
+bible_vt$Testaments=as.factor(ifelse(bible_vt$Testaments==bible_vt$Testaments[1],1,2))
+
+bible_vs=bible[,c('Sections','Verses')]
+bible_vs$Sections<-ordered(bible_vs$Sections,levels=c('Apostles','Gospels','History','Law','Paul','Prophets','Wisdom'))
+
+# CREATING FACTOR VARIABLE FOR VARIABLE TESTAMENTS AND TEXT
+bible_tt=aggregate(Testaments~text,data=bible,FUN=unique,collapse="")
+bible_tt$Testaments=as.factor(ifelse(bible_tt$Testaments==bible_tt$Testaments[1],1,2))# Creating levels for books as OT =1& NT =2
+
+# CREATING FACTOR VARIABLE FOR VARIABLE SECTIONS AND TEXT
+bible_st=aggregate(Sections~text,data=bible,FUN=unique,collapse="")
+
+
+#Collapsing the text of all the verses into the same books and then the same chapters together before performing clustering analsysis
+
+
+#Collpase text into the same 66 books
+attach(bible)
+text.Book=c()
+for (i in 1:66){
+  text.Book[i]=paste(text[Books==as.character(unique(Books)[i])],collapse="")
+}
+#Collpase text into the same 1189 Chapters 
+
+text.Chapters=c()
+for (i in 1:1189){
+  text.Chapters[i]=paste(text[Chapters==as.character(unique(Chapters)[i])],collapse = "")
+}
+#View(text.Chapters)
+#bible_testaments=data.frame(Testaments=unique(Testaments),text=text.Testaments)
+bible_books=data.frame(Books=unique(Books),text=text.Book)
+bible_chapters=data.frame(Chapters=unique(Chapters),text=text.Chapters)
+bible_verses=bible 
+dim(bible_books);dim(bible_chapters);dim(bible_verses)
+
+#view(bible_books)
+#view(bible_chapters)
+#view(bible_verses)
+
+#Performing standard text transformations - moving all case to lower, removing numbers, removing punctutation, removing common stopwords, strip whitespace and getting rid of special characters. we will consider n-grams, co-ocurrances, stemming and term document matrix.
+
+
+my_stopwords1 = c("a", "about", "above", "across", "after", "afterwards", "again", "against", "all", "almost", "alone", "along", "already", "also","although","always","am","among", "amongst", "amoungst", "amount", "an", "and", "another", "any","anyhow","anyone","anything","anyway", "anywhere", "are", "around", "as", "at", "back","be","became", "because","become","becomes", "becoming", "been", "before", "beforehand", "behind", "being", "below", "beside", "besides", "between", "beyond", "bill", "both", "bottom","but", "by", "call", "can", "cannot", "cant", "co", "con", "could", "couldnt", "cry", "de", "describe", "detail", "do", "done", "down", "due", "during", "each", "eg", "eight", "either", "eleven","else", "elsewhere", "empty", "enough", "etc", "even", "ever", "every", "everyone", "everything", "everywhere", "except", "few", "fifteen", "fify", "fill", "find", "fire", "first", "five", "for", "former", "formerly", "forty", "found", "four", "from", "front", "full", "further", "get", "give", "go", "had", "has", "hasnt", "have", "he", "hence", "her", "here", "hereafter", "hereby", "herein", "hereupon", "hers", "herself", "him", "himself", "his", "how", "however", "hundred", "ie", "if", "in", "inc", "indeed", "interest", "into", "is", "it", "its", "itself", "keep", "last", "latter", "latterly", "least", "less", "ltd", "made", "many", "may", "me", "meanwhile", "might", "mill", "mine", "more", "moreover", "most", "mostly", "move", "much", "must", "my", "myself", "name", "namely", "neither", "never", "nevertheless", "next", "nine", "no", "nobody", "none", "noone", "nor", "not", "nothing", "now", "nowhere", "of", "off", "often", "on", "once", "one", "only", "onto", "or", "other", "others", "otherwise", "our", "ours", "ourselves", "out", "over", "own","part", "per", "perhaps", "please", "put", "rather", "re", "same", "see", "seem", "seemed", "seeming", "seems", "serious", "several", "she", "should", "show", "side", "since", "sincere", "six", "sixty", "so", "some", "somehow", "someone", "something", "sometime", "sometimes", "somewhere", "still", "such", "system", "take", "ten", "than", "that", "the", "their", "them", "themselves", "then", "thence", "there", "thereafter", "thereby", "therefore", "therein", "thereupon", "these", "they", "thickv", "thin", "third", "this", "those", "though", "three", "through", "throughout", "thru", "thus", "to", "together", "too", "top", "toward", "towards", "twelve", "twenty", "two", "un", "under", "until", "up", "upon", "us", "very", "via", "was", "we", "well", "were", "what", "whatever", "when", "whence", "whenever", "where", "whereafter", "whereas", "whereby", "wherein", "whereupon", "wherever", "whether", "which", "while", "whither", "who", "whoever", "whole", "whom", "whose", "why", "will", "with", "within", "without", "would", "yet", "you", "your", "yours", "yourself", "yourselves", "the")
+
+my_stopwords2 = c('And','That','If','I','Then','And','The', 'Then', 'So', 'O', 'doth', "didst" , "thither","shouldest",'dost', 'doest', 'thou','thee','thy','ye','shall','shalt','lo','unto','hath','thereof','hast', 'set','thine','art','yea','midst','wherefore','wilt','thyself')
+
+#Canonical Groupings of the Bible
+Testaments=c(rep('OT',39),rep('NT',27))
+Sections=c(rep('Law',5),  rep('History',12),rep('Wisdom',5),rep('Prophets',17),rep('Gospels',5),rep('Paul',13),rep("Apostles",9))
+bible_new =data.frame(Books=unique(Books),Testaments=as.factor(c(rep("OT",39),rep("NT",27))), 
+                      Sections=as.factor(c(rep("Law",5),rep("History",12),rep("Wisdom",5),rep("Prophets",17),rep("Gospels",5),rep("Paul",13),rep("Apostles",9))),
+                      text=text.Book)
+
+
+#view(bible_new)
+#Turning the sentences to document term matrix (DTM)
+
+
+dtm_b <- CreateDtm(bible_books$text,doc_names = bible_books$Books,ngram_window = c(1, 7),
+                   stopword_vec = c(tm::stopwords("english"),tm::stopwords("SMART"),
+                                    my_stopwords1, my_stopwords2),
+                   #stem_lemma_function = function(x) SnowballC::wordStem(x, "porter"),
+                   lower = TRUE, remove_punctuation = TRUE, remove_numbers = FALSE)
+
+
+
+#Quest.1 Dimensions of dtm_b
+dim(dtm_b)
+view(dtm_b)
+
+```
+#Q2b) Wewouldliketoconsideronlyn-gramsappearingmorethantwotimesinthewholeBible,
+#andappearing in more than one Book of the Bible. Modify dtm_b to satisfy this criteria, and call it the same name. For your double checking, the dimension of this modi???ed dtm_b should be 66-by-24336. 
+```{r}
+dtm_b = dtm_b[,colSums(dtm_b) >2]
+dtm_tall = dtm_b
+dtm_tall[dtm_tall >=1]= 1
+dtm_b = dtm_tall[,colSums(dtm_tall) >1]
+dim(dtm_b)
+```
+
+
+
+
+
+#Q1c) Perform Association analyses on the modified `dtm_b` in such a way that you can answer:
+   ##Which of these is/are not a frequent itemset with confidence more than 70%: 
+   ##`{Jerusalem}`, 
+#`{David}`, 
+#`{kingdom}`, 
+#`{covenant}`,
+#`{Israel}`,
+#`{fear}`,
+#`{son}`,
+##`{saith,men,day}`,
+#`{spirit,word,man}`,
+#`{time,place,make,day,people}`,
+#`{heart,things,men,day,children,man}`,
+#\newline `{peace,time,evil,word,make,men,day,For,man,God}`?
+
+
+
+```{r}
+ra = as.data.frame(as.matrix(dtm_b),stringsAsFactors = FALSE)
+tb = discretizeDF(ra, default = list(method = "interval",breaks = 9))
+set = as(tb,"transactions")
+itemFrequencyPlot(set, topN = 10)
+
+# Training Apriori on the dataset
+memory.size(max = FALSE)
+rules = apriori(data = set, parameter = list(support = 0.94, confidence = 0.7))
+
+
+# Visualising the results
+length(rules)
+plot(rules[1:20], method="graph", control=list(type="items"))
+```
+
+##Q1d) With the response/target variable being `Sections`, perform Random Forest to find out the top 10 most important variables. Which of these variable(s) is/are not in this list: `Christ, faith, land, sea, hope`?
+
+#After performing random foest ,from the plot vaiables such as faith,sea,hope are not in the list
+```{r}
+#RANDOMM FOREST
+library(randomForest)
+set.seed(123)
+classifier = randomForest(x = ra,
+                          y = as.factor(Sections),
+                          ntree = 500)
+varImpPlot(classifier,sort = TRUE ,n.var = min(10))
+```
+
